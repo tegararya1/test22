@@ -230,7 +230,8 @@ function selectPen(id){
           <div class="bg-white rounded-xl border border-slate-100 px-4 py-3 flex items-center justify-between">
             <div>
               <div class="font-semibold text-slate-800">${STATE.selectedPen.label} - ${STATE.selectedPen.jenis}</div>
-              <div class="text-xs text-slate-500">Oleh: ${h.by} • ${new Date(h.time).toLocaleString('id-ID')}</div>
+              <div class="text-xs text-slate-500">Oleh: ${h.studentName} • ${new Date(h.time).toLocaleString('id-ID')}</div>
+
             </div>
             ${statusPill(h.status)}
           </div>
