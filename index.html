@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SLB Damayanti – Sistem Pengelolaan Hewan Ternak</title>
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SweetAlert2 for modal success -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --bg: radial-gradient(1200px 800px at 10% -10%, rgba(59,130,246,0.08), transparent),
+                       radial-gradient(1200px 800px at 110% 10%, rgba(16,185,129,0.08), transparent); }
+    html, body { height: 100%; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    body { background: #f8fafc; background-image: var(--bg); }
+    .card { box-shadow: 0 10px 25px rgba(2, 6, 23, 0.08); }
+    .btn { transition: transform .06s ease, box-shadow .2s ease; }
+    .btn:active { transform: translateY(1px) scale(0.99); }
+    /* Button halo */
+    .btn-choice:focus-visible { outline: 3px solid rgba(59,130,246,.35); outline-offset: 2px; border-radius: 1rem; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="app" class="min-h-screen flex items-center justify-center p-4">
+    <!-- Root container for SPA screens (rendered by JS) -->
+  </div>
+
+  <script>
+    /**************************************
+     * CONFIGURASI & DATA DUMMY
+     **************************************/
+    // Jika ingin simpan ke backend (Google Apps Script Web App), set true dan isi WEBAPP_URL
+    const USE_BACKEND = true; // ubah ke true jika ingin kirim ke server
+    const WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzBs39io2qYyoJorSwNsVkMKC1lMudtu_7P7Fd-7nfIAMloXhDZ1IP_loVJxcA56Q__/exec"; // contoh: "https://script.google.com/macros/s/AKfycb.../exec"
+
+    // Data awal (bisa diganti ambil dari backend)
+    const STUDENTS = [
+      { id: "s1", name: "Ahmad Rizki", gender: "m" },
+      { id: "s2", name: "Siti Nurhaliza", gender: "f" },
+      { id: "s3", name: "Budi Santoso", gender: "m" },
+      { id: "s4", name: "Dewi Sartika", gender: "f" },
+      { id: "s5", name: "Eko Prasetyo", gender: "m" },
+      { id: "s6", name: "Fitri Handayani", gender: "f" },
+      { id: "s7", name: "Gilang Ramadhan", gender: "m" },
+      { id: "s8", name: "Hani Safitri", gender: "f" },
+      { id: "s9", name: "Indra Gunawan", gender: "m" },
+      { id: "s10", name: "Jihan Aulia", gender: "f" },
+    ];
+
+    const KANDANG = [
+      { id: "A1", label: "Kandang A1", jenis: "Sapi", icon: cowIcon() },
+      { id: "A2", label: "Kandang A2", jenis: "Kambing", icon: goatIcon() },
+      { id: "B1", label: "Kandang B1", jenis: "Ayam", icon: chickenIcon() },
+      { id: "B2", label: "Kandang B2", jenis: "Bebek", icon: duckIcon() },
+      { id: "C1", label: "Kandang C1", jenis: "Domba", icon: sheepIcon() },
+      { id: "C2", label: "Kandang C2", jenis: "Sapi", icon: cowIcon() },
+      { id: "D1", label: "Kandang D1", jenis: "Kambing", icon: goatIcon() },
+      { id: "D2", label: "Kandang D2", jenis: "Ayam", icon: chickenIcon() },
+      { id: "E1", label: "Kandang E1", jenis: "Bebek", icon: duckIcon() },
+      { id: "E2", label: "Kandang E2", jenis: "Domba", icon: sheepIcon() },
+    ];
+
+    /**************************************
+     * UTIL & STATE
+     **************************************/
+    const app = document.getElementById('app');
+
+    const STATE = {
+      user: null,           // { username }
+      selectedStudent: null,// object STUDENTS
+      selectedPen: null,    // object KANDANG
+      history: loadHistory()// array of records
+    };
+
+    function saveHistory(records){
+      localStorage.setItem('slb_history', JSON.stringify(records));
+    }
+    function loadHistory(){
+      try { return JSON.parse(localStorage.getItem('slb_history')) || []; } catch(e){ return []; }
+    }
+
+    function formatDate(d){
+      const pad = n => String(n).padStart(2,'0');
+      return `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}, ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+
+    function avatar(gender="m"){ // simple emoji avatar
+      return gender === 'f'
+        ? '<div class="text-6xl">👧</div>'
+        : '<div class="text-6xl">👦</div>'
+    }
+
+    function statusPill(status){
+      const base = 'px-3 py-1 rounded-full text-sm font-medium';
+      if(status === 'Sehat') return `<span class="${base} bg-emerald-100 text-emerald-700">Sehat</span>`;
+      return `<span class="${base} bg-rose-100 text-rose-700">Sakit</span>`;
+    }
+
+    /**************************************
+     * RENDERERS (Screens)
+     **************************************/
+    function render(){
+      if(!STATE.user) return renderLogin();
+      if(!STATE.selectedStudent) return renderStudentList();
+      if(!STATE.selectedPen) return renderPenList();
+      return renderCondition();
+    }
+
+    function shell(title, bodyHTML, headerRight=''){
+      app.innerHTML = `
+        <div class="max-w-5xl w-full mx-auto">
+          <div class="mb-6">
+            <div class="flex items-center justify-between">
+              <h1 class="text-3xl font-extrabold text-slate-800">${title}</h1>
+              ${headerRight}
+            </div>
+          </div>
+          ${bodyHTML}
+        </div>`;
+    }
+
+    // Login Screen
+    function renderLogin(){
+      app.innerHTML = `
+        <div class="w-full max-w-md">
+          <div class="bg-white card rounded-2xl p-8">
+            <div class="w-16 h-16 mx-auto rounded-full bg-gradient-to-br from-emerald-500 to-blue-500 grid place-items-center shadow-lg mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" class="w-8 h-8"><path d="M12 12c2.761 0 5-2.239 5-5S14.761 2 12 2 7 4.239 7 7s2.239 5 5 5Zm-9 9a9 9 0 1 1 18 0H3Z"/></svg>
+            </div>
+            <h2 class="text-center text-2xl font-extrabold text-slate-800">SLB Damayanti</h2>
+            <p class="text-center text-slate-500 mt-1">Sistem Pengelolaan Hewan Ternak</p>
+            <div class="mt-6 space-y-4">
+              <div>
+                <label class="block text-sm font-semibold text-slate-700">Username</label>
+                <input id="login-username" class="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Guru Damayanti" />
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-slate-700">Password</label>
+                <input id="login-password" type="password" class="mt-1 w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Masukkan password" />
+              </div>
+              <button id="btn-login" class="btn w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-blue-600 text-white font-bold">Masuk</button>
+            </div>
+          </div>
+        </div>`;
+
+      document.getElementById('btn-login').onclick = () => {
+        const username = document.getElementById('login-username').value || 'Guru Damayanti';
+        const password = document.getElementById('login-password').value;
+        // Dummy auth (ganti sesuai kebutuhan)
+        if(password !== undefined) {
+          STATE.user = { username };
+          render();
+        }
+      };
+    }
+
+    // Student List
+    function renderStudentList(){
+      const cards = STUDENTS.map(s => `
+        <button class="btn group bg-white card rounded-2xl p-5 text-left hover:shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500" onclick='selectStudent("${s.id}")'>
+          <div class="flex items-center gap-4">
+            ${avatar(s.gender)}
+            <div>
+              <div class="text-lg font-extrabold text-slate-800">${s.name}</div>
+              <div class="text-slate-500 text-sm">Klik untuk pilih</div>
+            </div>
+          </div>
+        </button>`).join('');
+
+      shell(
+        'Daftar Siswa',
+        `
+        <div class="bg-white card rounded-2xl p-6 mb-6">
+          <p class="text-slate-600">Pilih siswa untuk melakukan pengecekan ternak</p>
+        </div>
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">${cards}</div>
+        `,
+        `<button class="px-4 py-2 rounded-xl bg-rose-500 text-white font-semibold" onclick="logout()">Keluar</button>`
+      );
+    }
+
+    function selectStudent(id){
+      STATE.selectedStudent = STUDENTS.find(s => s.id === id);
+      render();
+    }
+
+    // Pen (Kandang) List
+    function renderPenList(){
+      const cards = KANDANG.map(k => `
+        <button class="btn bg-white card rounded-2xl p-5 text-left hover:shadow-xl" onclick='selectPen("${k.id}")'>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 grid place-items-center">${k.icon}</div>
+            <div>
+              <div class="text-lg font-extrabold text-slate-800">${k.label}</div>
+              <div class="text-slate-500 text-sm">${k.jenis}</div>
+              <div class="text-blue-600 text-xs mt-1">Klik untuk cek</div>
+            </div>
+          </div>
+        </button>
+      `).join('');
+
+      shell(
+        'Pilih Kandang',
+        `
+          <div class="bg-white card rounded-2xl p-6 mb-6">
+            <div class="text-slate-600">Siswa: <span class="font-semibold text-emerald-600">${STATE.selectedStudent.name}</span></div>
+          </div>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">${cards}</div>
+        `,
+        `<button class="px-4 py-2 rounded-xl bg-slate-600 text-white font-semibold" onclick="backToStudents()">Kembali</button>`
+      );
+    }
+
+function selectPen(id){
+  STATE.selectedPen = KANDANG.find(k => k.id === id);
+  render();
+  if (USE_BACKEND) { loadHistoryForCurrent(); }
+}
+
+
+    // Condition Screen
+    function renderCondition(){
+      const historyItems = STATE.history
+        .filter(h => h.studentId === STATE.selectedStudent.id && h.penId === STATE.selectedPen.id)
+        .sort((a,b)=>b.time - a.time)
+        .map(h => `
+          <div class="bg-white rounded-xl border border-slate-100 px-4 py-3 flex items-center justify-between">
+            <div>
+              <div class="font-semibold text-slate-800">${STATE.selectedPen.label} - ${STATE.selectedPen.jenis}</div>
+              <div class="text-xs text-slate-500">Oleh: ${h.by} • ${new Date(h.time).toLocaleString('id-ID')}</div>
+            </div>
+            ${statusPill(h.status)}
+          </div>
+        `).join('') || `<div class="text-center text-slate-400">Belum ada riwayat pengecekan</div>`;
+
+      shell(
+        'Kondisi Hewan',
+        `
+          <div class="bg-white card rounded-2xl p-6 mb-6">
+            <div class="text-slate-600">Siswa: <span class="font-semibold text-emerald-600">${STATE.selectedStudent.name}</span> | Kandang: <a class="text-blue-600 font-medium" href="#" onclick="backToPens()">${STATE.selectedPen.label}</a></div>
+          </div>
+
+          <div class="bg-white card rounded-2xl p-6 mb-6">
+            <h3 class="text-center text-xl font-extrabold text-slate-800">Pilih Kondisi Hewan Ternak</h3>
+            <div class="mt-6 flex items-center justify-center gap-8">
+              <button class="btn btn-choice w-40 h-28 rounded-2xl bg-emerald-500/90 hover:bg-emerald-600 text-white text-lg font-extrabold grid place-items-center" onclick="submitStatus('Sehat')">
+                <span class="text-2xl">●</span>
+                <span>SEHAT</span>
+              </button>
+              <button class="btn btn-choice w-40 h-28 rounded-2xl bg-rose-500/90 hover:bg-rose-600 text-white text-lg font-extrabold grid place-items-center" onclick="submitStatus('Sakit')">
+                <span class="text-2xl">●</span>
+                <span>SAKIT</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white card rounded-2xl p-6">
+            <h3 class="text-lg font-extrabold text-slate-800 mb-4">Riwayat Pengecekan</h3>
+            <div class="space-y-3">${historyItems}</div>
+          </div>
+        `,
+        `<button class="px-4 py-2 rounded-xl bg-slate-600 text-white font-semibold" onclick="backToPens()">Kembali</button>`
+      );
+    }
+
+    /**************************************
+     * EVENTS & ACTIONS
+     **************************************/
+    function logout(){ STATE.user=null; STATE.selectedStudent=null; STATE.selectedPen=null; render(); }
+    function backToStudents(){ STATE.selectedStudent=null; STATE.selectedPen=null; render(); }
+    function backToPens(){ STATE.selectedPen=null; render(); }
+
+async function submitStatus(status){
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    studentId: STATE.selectedStudent.id,
+    studentName: STATE.selectedStudent.name,
+    penId: STATE.selectedPen.id,
+    penLabel: STATE.selectedPen.label,
+    jenis: STATE.selectedPen.jenis,
+    status,
+    by: STATE.user.username,
+    time: Date.now()
+  };
+
+  // Simpan lokal agar responsif
+  STATE.history.push(record);
+  saveHistory(STATE.history);
+  render();
+
+  // Kirim ke backend (Sheet)
+  if (USE_BACKEND && WEBAPP_URL) {
+    try {
+      await fetch(WEBAPP_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', payload: record })
+      });
+    } catch (err) {
+      console.error('Gagal kirim ke backend:', err);
+    }
+  }
+
+Swal.fire({
+  icon: 'success',
+  title: 'Data Berhasil Disimpan!',
+  text: 'Kondisi hewan telah tercatat dalam sistem',
+  confirmButtonText: 'OK',
+  confirmButtonColor: '#10B981',
+  customClass: { popup: 'rounded-2xl' }
+}).then(() => {
+  backToPens();  // <-- kembali ke halaman Pilih Kandang
+});
+
+}
+// Ambil riwayat dari backend untuk siswa & kandang yang sedang terpilih
+async function loadHistoryForCurrent(){
+  if (!USE_BACKEND || !WEBAPP_URL || !STATE.selectedStudent || !STATE.selectedPen) return;
+  try {
+    const qs = new URLSearchParams({
+      action: 'list',
+      studentId: STATE.selectedStudent.id,
+      penId: STATE.selectedPen.id
+    });
+    const res = await fetch(`${WEBAPP_URL}?${qs.toString()}`);
+    const data = await res.json();
+    if (Array.isArray(data.items)) {
+      // Gabung dengan lokal, unik berdasarkan id
+      const map = new Map(STATE.history.map(x => [x.id, x]));
+      data.items.forEach(x => map.set(x.id, x));
+      STATE.history = Array.from(map.values());
+      saveHistory(STATE.history);
+      render(); // refresh tampilan riwayat
+    }
+  } catch (e) {
+    console.warn('Gagal fetch riwayat:', e);
+  }
+}
+
+
+
+    /**************************************
+     * ICONS (inline SVG)
+     **************************************/
+    function cowIcon(){ return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' class='w-10 h-10'><path fill='#111827' d='M6 8h12a3 3 0 0 1 3 3v3a5 5 0 0 1-5 5h-1l-1.5-1.5a2 2 0 0 0-1.4-.6H8a5 5 0 0 1-5-5v-1a3 3 0 0 1 3-3Z'/><circle cx='9' cy='12' r='1.5' fill='#fff'/><circle cx='15' cy='12' r='1.5' fill='#fff'/></svg>` }
+    function goatIcon(){ return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' class='w-10 h-10'><path fill='#111827' d='M4 12a6 6 0 0 1 6-6h1c3.9 0 7 3.1 7 7v6h-2l-2-2H9a5 5 0 0 1-5-5Z'/></svg>` }
+    function chickenIcon(){ return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' class='w-10 h-10'><path fill='#111827' d='M6 12a6 6 0 0 1 6-6h2l2-2 2 2-1 2 2 2v2a8 8 0 0 1-8 8H9a3 3 0 0 1-3-3v-5Z'/></svg>` }
+    function duckIcon(){ return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' class='w-10 h-10'><path fill='#111827' d='M4 13a6 6 0 0 1 6-6h1a5 5 0 0 0 5-5 6 6 0 0 1 3 5v2a8 8 0 0 1-8 8H8a4 4 0 0 1-4-4Z'/></svg>` }
+    function sheepIcon(){ return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' class='w-10 h-10'><path fill='#111827' d='M6 10a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v3a5 5 0 0 1-5 5h-2l-2 2-2-2H9a5 5 0 0 1-5-5v-3Z'/></svg>` }
+
+    // Start app
+    render();
+  </script>
+</body>
+</html>
